@@ -1,4 +1,5 @@
-ucl-videoconverter
+uclvr-backend
 ==================
 
-Video frame extractor for Structure from Motion
+Structure from motion toolkit backend.
+This software allows easy setup of a multiuser SfM service distributed among multiple computing nodes
