@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<uclvr>
+<auth>
+<status>Authenticated</status>
+<user>{{uname}}</user>
+</auth>
+<jobs>
+{% for element in pending %}
+<item status='pending'>{{element.vname}}</item>
+{% endfor %}
+{% for element in working %}
+<item status='working'>{{element.vname}}</item>
+{% endfor %}
+</jobs>
+</uclvr>

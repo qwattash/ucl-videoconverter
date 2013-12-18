@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<uclvr>
+<auth>
+<status>Authenticated</status>
+<user>{{uname}}</user>
+</auth>
+<upload>
+<message>{{message}}</message>
+</upload>
+</uclvr>

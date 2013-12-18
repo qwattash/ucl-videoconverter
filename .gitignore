@@ -1,0 +1,12 @@
+#the DB must not be pushed, NEVER
+*.sqlite3
+#no data dir, this can take a lot of space
+uclvr_data/*
+#no log files
+*.log
+#no emacs temp files
+*~
+#no python pyc
+*.pyc
+#no db migrations
+sfmmanager/migrations/*

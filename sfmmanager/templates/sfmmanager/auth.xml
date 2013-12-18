@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<uclvr>
+<auth>
+{% if uname %}
+<user>{{uname}}</user>
+{% endif %}
+{% if status %}
+<status>{{status}}</status>
+{% endif %}
+{% if message %}
+<message>{{message}}</message>
+{% endif %}
+</auth>
+</uclvr>
