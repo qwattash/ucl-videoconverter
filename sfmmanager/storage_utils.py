@@ -77,6 +77,8 @@ class ResourceData(object):
 
     def getOutputPath(self):
         output = self.getOutputFiles()
+        if len(output) == 0:
+            return None #return none if no output is found
         #get file with the biggest point cloud
         vertexnum = [] #vertex num for each file in output
         max_idx = 0

@@ -29,6 +29,16 @@ REQ_DOWNLOAD = "download"
 RES_SUCCESS = "success"
 RES_FAILURE = "failure"
 
+#status codes
+STATUS = {'1': 'reconstructed',
+          '2': 'pending',
+          '3': 'error',
+          '4': 'forbidden',
+          '5': 'unknown',
+          '6': 'extracting_frames',
+          '7': 'working',
+          '8': 'converting_output'}
+
 """
 Handle generic requests 
 """
@@ -104,7 +114,7 @@ def status(request):
         jobs = Video.objects.filter(uid=request.user)
         payload = []
         for job in jobs:
-            payload.append((job.status, job.vname))
+            payload.append((STATUS[str(job.status)], job.vname))
         context = RequestContext(request, 
                                  {'uname': request.user.username,
                                   'req': REQ_STATUS,
@@ -258,5 +268,9 @@ def rerun(request):
     vd = Video.objects.filter(vname=name)
     for v in vd:
         print "rerunning %s" % name
+        nframes = request.GET.get('fps', None)
+        if nframes != None:
+            v.num_extract_fps = int(nframes)
+            v.save()
         v.process()
     return HttpResponse('<p>Rerun</p>')

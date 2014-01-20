@@ -36,7 +36,8 @@ class Video(models.Model):
     status = models.CharField(max_length=1, choices=VIDEO_STATUS, default=STATUS_PENDING)
     #video data file
     data = models.FileField(upload_to=lambda instance, filename: Video.generate_file_name(instance, filename), null=True)
-
+    #number of frames per second to extract from the video
+    num_extract_fps = models.IntegerField(default=1)
     """
     generate file name for given instance, self identifies the instance
     """
@@ -54,7 +55,9 @@ class Video(models.Model):
     in the celery module
     """
     def process(self):
+        self.status = Video.STATUS_PENDING
         #res = tasks.extractFrames.apply_async((self.id,))
-        res = chain(tasks.extractFrames.s(self.id), 
+        res = chain(tasks.deleteProcessingData.s(self.id),
+                    tasks.extractFrames.s(), 
                     tasks.processFrames.s(), 
                     tasks.processOutput.s())()

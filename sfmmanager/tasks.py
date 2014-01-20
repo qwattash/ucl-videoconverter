@@ -36,14 +36,17 @@ def extractFrames(vid):
         #create logfile
         log = resource.getLogFile("ffmpeg")
         output_path = resource.joinPath("frame%d.jpg")
-        command = "ffmpeg -i %s -r 1 %s" % (video.data.url, output_path)
+        command = "ffmpeg -i %s -r %d %s" % (video.data.url, video.num_extract_fps, output_path)
         args = shlex.split(command)
+        print args
         extractor = subprocess.Popen(args,
                                      stdout=log, 
                                      stderr=log, 
                                      stdin=None)
         extractor.wait()
         log.close()
+        if extractor.returncode != 0:
+            raise Exception('ffmpeg terminated incorrectly') 
     except Exception as e:
         video.status = Video.STATUS_ERROR
         video.save()
@@ -81,6 +84,8 @@ def processFrames(vid):
                                 stderr=log)
         vsfm.wait()
         log.close()
+        if vsfm.returncode != 0:
+            raise Exception('vsfm terminated incorrectly')
     except:
         video.status = Video.STATUS_ERROR
         video.save()
@@ -103,6 +108,10 @@ def processOutput(vid):
     video.save()
     resource = ResourceData(video.data.url)
     plyoutput = resource.getOutputPath()
+    if not plyoutput:
+        video.status = Video.STATUS_ERROR
+        video.save()
+        return vid
     objoutput = resource.joinPath("result.obj")
     try:
         
@@ -110,12 +119,15 @@ def processOutput(vid):
         log = resource.getLogFile("meshlab")
         command = "meshlabserver -i %s -o %s -om vc vn" % (plyoutput, objoutput)
         args = shlex.split(command)
-        vsfm = subprocess.Popen(args,
+        print args
+        meshlab = subprocess.Popen(args,
                                 stdin=None,
                                 stdout=log,
                                 stderr=log)
-        vsfm.wait()
+        meshlab.wait()
         log.close()
+        if meshlab.returncode != 0:
+            raise Exception('meshlabserver terminated incorrectly')
         video.status = Video.STATUS_RECONSTRUCTED
         video.save()
     except:
@@ -132,3 +144,4 @@ def deleteProcessingData(vid):
     resource.removeProcessingData()
     video.status = Video.STATUS_PENDING
     video.save()
+    return vid

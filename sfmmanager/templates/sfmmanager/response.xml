@@ -1,27 +1,5 @@
-<?xml version="1.0"?>
-<uclvr>
-<account>
-<user>{{uname}}</user>
-</account>
-<request>
-<code>{{req}}</code>
-<params>{{req_params}}</params>
-</request>
-<response>
-  <code>{{code}}</code>
-  {% if payload %}
-  {% for item in payload %}
-  <item>
-    {{item}}
-  </item>
-  {% endfor %}
-  {% endif %}
-  {% if list_payload %}
-  {% for item_token,item in list_payload %}
-  <item type="{{item_token}}">
-    {{item}}
-  </item>
-  {% endfor %}
-  {% endif %}
-</response>
-</uclvr>
+user:{{uname}}
+request:{{req}}
+{% if payload %}{% for item in payload %}{{item}},{% endfor %}{% endif %}
+{% if list_payload %}{% for item_token,item in list_payload %}{{item}} {{item_token}}
+{% endfor %}{% endif %}

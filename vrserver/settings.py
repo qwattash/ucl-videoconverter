@@ -106,8 +106,12 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/1.6/howto/static-files/
 
-STATIC_URL = '/static/'
-
+STATIC_URL = '/home/azureuser/static/'
+STATIC_ROOT = '/home/azureuser/static/'
+STATICFILES_DIRS = (
+    os.path.join(BASE_DIR, "static"),
+    '/home/azureuser/static/',
+)
 #custom settings
 
 MEDIA_ROOT = os.path.join(BASE_DIR, 'uclvr_data')
