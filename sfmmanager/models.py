@@ -8,6 +8,9 @@ from celery import chain
 
 import os
 
+#constant for the maximum number of uploadable videos by an user
+USER_MAX_FILES = 20
+
 class Video(models.Model):
 
     STATUS_RECONSTRUCTED = 1

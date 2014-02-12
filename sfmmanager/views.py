@@ -6,6 +6,7 @@
 from django.shortcuts import render, render_to_response
 from django.http import HttpResponse, Http404
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.models import User
 from django.template import RequestContext, loader
 from django.conf import settings
 
@@ -23,8 +24,10 @@ from sfmmanager.storage_utils import *
 #reserved values for output code fields
 REQ_AUTH = "auth"
 REQ_DEAUTH = "deauth"
+REQ_DEL = "delete"
 REQ_STATUS = "status"
 REQ_JOB = "job"
+REQ_REG = "register"
 REQ_DOWNLOAD = "download"
 RES_SUCCESS = "success"
 RES_FAILURE = "failure"
@@ -49,10 +52,10 @@ def index(request):
 """
 authenticate an user, begin a new session and return a status
 Message Format
-<post>
+<get>
 <param type='string'>uname</param>
 <param type='string'>password</param>
-</post>
+</get>
 """
 def auth(request):
     uname = request.GET.get("uname", None)
@@ -102,6 +105,56 @@ def auth(request):
                 })
     return HttpResponse(template.render(context))
 
+"""
+create new user account using the django authentication module
+the request should include the following fields in a GET request
+uname: username
+password: the password that wants to use
+<get>
+<param type='string'>uname</param>
+<param type='string'>password</param>
+<param type='string'>email</param>
+</get>
+"""
+def register(request):
+    #first of all check that an user with the same name does not exist
+    name = request.GET.get('uname', None)
+    template = loader.get_template('sfmmanager/response.xml')
+    try:
+        user = User.objects.get(username=name)
+        #if the user does not exist an exception is raised
+        #already exixting
+        context = RequestContext(request, {
+                'uname': name,
+                'req': REQ_REG,
+                'req_params': '',
+                'code': RES_FAILURE,
+                'payload': ["Account with same name already exists"]
+                })
+    except User.DoesNotExist:
+        #register new user
+        pwd = request.GET.get('password', None)
+        email = request.GET.get('email', None)
+        if (name and pwd and email):
+            user = User.objects.create_user(name, email, pwd)
+            context = RequestContext(request, {
+                'uname': name,
+                'req': REQ_REG,
+                'req_params': '',
+                'code': RES_SUCCESS,
+                'payload': ["registered"]
+                })
+        else:
+            #missing some param, error
+            context = RequestContext(request, {
+                'uname': name,
+                'req': REQ_REG,
+                'req_params': '',
+                'code': RES_FAILURE,
+                'payload': ["missing parameter"]
+                })
+
+    return HttpResponse(template.render(context))
 
 """
 get user status, current queued jobs, working jobs
@@ -173,7 +226,18 @@ def upload(request):
                         'code': RES_FAILURE,
                         'payload': []
                         }
-        if request.method == "POST":
+        #check if the user has reached the maximum video count
+        #that is allowed to store
+        user_videos = Video.objects.filter(uid=request.user)
+        #the user_max_files constant is defined in the model
+        if len(user_videos) >= USER_MAX_FILES:
+            context_dict = {'uname': request.user.username,
+                            'req': REQ_JOB,
+                            'req_params': '',
+                            'code': RES_FAILURE,
+                            'payload': ['Maximum video upload limit reached']
+                }
+        elif request.method == "POST":
             form = UploadFileForm(request.POST, request.FILES)
             if form.is_valid():
                 video = Video()
@@ -208,6 +272,7 @@ def upload(request):
         else:
             #non POST request
             context_dict['payload'] = ['Invalid request']
+        #get the context given
         context = RequestContext(request, context_dict)
     else:
         context = RequestContext(request, 
@@ -217,6 +282,7 @@ def upload(request):
                                   'code': RES_FAILURE,
                                   'payload': ["unauthenticated"]
                                   })
+    #render the response using the context previously built
     return HttpResponse(template.render(context))
 
 
@@ -225,7 +291,7 @@ serve requested file, se apache mod_xsendfile for production use
 https://docs.djangoproject.com/en/1.2/howto/static-files/
 https://github.com/johnsensible/django-sendfile/tree/master/examples/protected_downloads
 """
-#TODO migrate to protected_downloads library to abstract permissions <<-----------------------------------------------------------
+#TODO migrate to protected_downloads library to abstract permissions <<-----------
 def getfile(request):
     template = loader.get_template('sfmmanager/response.xml')
     if request.user.is_authenticated():
@@ -250,6 +316,58 @@ def getfile(request):
         context = RequestContext(request, 
                                  {'uname': '',
                                   'req': REQ_DOWNLOAD,
+                                  'req_params': '',
+                                  'code': RES_FAILURE,
+                                  'payload': ["unauthenticated"]
+                                  })
+    return HttpResponse(template.render(context))
+    
+"""
+remove a video and video data associated on the server
+<get>
+<param type='string'>video name</param>
+</get>
+"""
+def delete(request):
+    #check if user is authenticated
+    template = loader.get_template('sfmmanager/response.xml')
+    if request.user.is_authenticated():
+        rname = request.GET.get('name', None)
+        if rname:
+            video_objects = Video.objects.filter(vname=rname)
+            if (len(video_objects) > 0):
+                video = video_objects[0]
+                resource = ResourceData(video.data.url)
+                #delete video and data
+                resource.removeProcessingData()
+                video_objects.delete()
+                context = RequestContext(request, 
+                                   {'uname': request.user.username,
+                                    'req': REQ_DEL,
+                                    'req_params': rname,
+                                    'code': RES_SUCCESS,
+                                    'payload': ["deleted"]
+                                    })
+            else:
+                context = RequestContext(request, 
+                                  {'uname': request.user.username,
+                                  'req': REQ_DEL,
+                                  'req_params': '',
+                                  'code': RES_FAILURE,
+                                  'payload': ["unexisting video"]
+                                  })
+        else:
+            context = RequestContext(request, 
+                                 {'uname': request.user.username,
+                                  'req': REQ_DEL,
+                                  'req_params': rname,
+                                  'code': RES_FAILURE,
+                                  'payload': ["no name given"]
+                                  })
+    else:
+        context = RequestContext(request, 
+                                 {'uname': '',
+                                  'req': REQ_DEL,
                                   'req_params': '',
                                   'code': RES_FAILURE,
                                   'payload': ["unauthenticated"]

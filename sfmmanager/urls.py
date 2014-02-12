@@ -15,5 +15,7 @@ urlpatterns = patterns('',
                        url(r'^upload/?$', views.upload, name='upload'),
                        url(r'^download/?$', views.getfile, name='getfile'),
                        url(r'^test/?$', views.test, name='test'),
-                       url(r'^rerun/?$', views.rerun, name='rerun')
+                       url(r'^rerun/?$', views.rerun, name='rerun'),
+                       url(r'^register/?$', views.register, name='register'),
+                       url(r'^delete/?$', views.delete, name='delete')
 )
