@@ -50,6 +50,37 @@ def index(request):
     raise Http404
 
 """
+Generic response building functions
+"""
+def buildResponseMessage(request, request_code, response_code, msg):
+    template = loader.get_template('sfmmanager/response.xml')
+    uname = ''
+    if request.user.is_authenticated():
+        uname = request.user.username
+    context = RequestContext(request, {
+                        'uname': uname,
+                        'req': request_code,
+                        'req_params': '',
+                        'code': response_code,
+                        'payload': [msg]
+                })
+    return HttpResponse(template.render(context))
+
+def buildResponseList(request, request_code, response_code, payload_list):
+    template = loader.get_template('sfmmanager/response.xml')
+    uname = ''
+    if request.user.is_authenticated():
+        uname = request.user.username
+    context = RequestContext(request, {
+                        'uname': uname,
+                        'req': request_code,
+                        'req_params': '',
+                        'code': response_code,
+                        'list_payload': payload_list
+                })
+    return HttpResponse(template.render(context))
+
+"""
 authenticate an user, begin a new session and return a status
 Message Format
 <get>
@@ -60,16 +91,9 @@ Message Format
 def auth(request):
     uname = request.GET.get("uname", None)
     pwd = request.GET.get("password", None)
-    template = loader.get_template('sfmmanager/response.xml')
     if uname == None or pwd == None:
         #invalid parameter passed, return error
-        context = RequestContext(request, {
-                'uname': '',
-                'req': REQ_AUTH,
-                'req_params': '',
-                'code': RES_FAILURE,
-                'payload': ["invalid request format"]
-                })
+        return buildResponseMessage(request, REQ_AUTH, RES_FAILURE, "Invalid request format")
     else:
         #extract user row from database
         user = authenticate(username=uname, password=pwd)
@@ -77,33 +101,15 @@ def auth(request):
             #passwod and user correct
             if user.is_active:
                 #valid account
-                context = RequestContext(request, {
-                        'uname': uname,
-                        'req': REQ_AUTH,
-                        'req_params': '',
-                        'code': RES_SUCCESS,
-                        'payload': ["authentication succeded"]
-                })
                 login(request, user)
+                return buildResponseMessage(request, REQ_AUTH, RES_SUCCESS, "Authentication succeded")    
             else:
                 #account disabled
-                context = RequestContext(request, {
-                        'uname': uname,
-                        'req': REQ_AUTH,
-                        'req_params': '',
-                        'code': RES_FAILURE,
-                        'payload': ["account banned"]
-                })
+                return buildResponseMessage(request, REQ_AUTH, RES_FAILURE, "Account banned")
         else:
             #invalid username or password
-            context = RequestContext(request, {
-                'uname': uname,
-                'req': REQ_AUTH,
-                'req_params': '',
-                'code': RES_FAILURE,
-                'payload': ["invalid username or password"]
-                })
-    return HttpResponse(template.render(context))
+            return buildResponseMessage(request, REQ_AUTH, RES_FAILURE, "Invalid username or password")
+
 
 """
 create new user account using the django authentication module
@@ -119,42 +125,22 @@ password: the password that wants to use
 def register(request):
     #first of all check that an user with the same name does not exist
     name = request.GET.get('uname', None)
-    template = loader.get_template('sfmmanager/response.xml')
     try:
         user = User.objects.get(username=name)
         #if the user does not exist an exception is raised
-        #already exixting
-        context = RequestContext(request, {
-                'uname': name,
-                'req': REQ_REG,
-                'req_params': '',
-                'code': RES_FAILURE,
-                'payload': ["Account with same name already exists"]
-                })
+        #if the user exists go on
+        return buildResponseMessage(request, REQ_REG, RES_FAILURE, "Account with same name already exists")
     except User.DoesNotExist:
         #register new user
         pwd = request.GET.get('password', None)
         email = request.GET.get('email', None)
-        if (name and pwd and email):
+        if (name and pwd):
             user = User.objects.create_user(name, email, pwd)
-            context = RequestContext(request, {
-                'uname': name,
-                'req': REQ_REG,
-                'req_params': '',
-                'code': RES_SUCCESS,
-                'payload': ["registered"]
-                })
+            login(request, user)
+            return buildResponseMessage(request, REQ_REG, RES_SUCCESS, "Registered")
         else:
             #missing some param, error
-            context = RequestContext(request, {
-                'uname': name,
-                'req': REQ_REG,
-                'req_params': '',
-                'code': RES_FAILURE,
-                'payload': ["missing parameter"]
-                })
-
-    return HttpResponse(template.render(context))
+            return buildResponseMessage(request, REQ_REG, RES_FAILURE, "Missing parameter")
 
 """
 get user status, current queued jobs, working jobs
@@ -162,52 +148,24 @@ authentication status etc.
 """
 def status(request):
     #session handling makes user available directly in request
-    template = loader.get_template('sfmmanager/response.xml')
     if request.user.is_authenticated():
         jobs = Video.objects.filter(uid=request.user)
         payload = []
         for job in jobs:
             payload.append((STATUS[str(job.status)], job.vname))
-        context = RequestContext(request, 
-                                 {'uname': request.user.username,
-                                  'req': REQ_STATUS,
-                                  'req_params': '',
-                                  'code': RES_SUCCESS,
-                                  'list_payload': payload
-                                  })
+        return buildResponseList(request, REQ_STATUS, RES_SUCCESS, payload)
     else:
-        context = RequestContext(request, 
-                                 {'uname': '',
-                                  'req': REQ_STATUS,
-                                  'req_params': '',
-                                  'code': RES_FAILURE,
-                                  'payload': ["unauthenticated"]
-                                  })
-    return HttpResponse(template.render(context))
+        return buildResponseMessage(request, REQ_STATUS, RES_FAILURE, "Unauthenticated")
 
 """
 Log out user
 """
 def unauth(request):
-    template = loader.get_template('sfmmanager/response.xml')
     if request.user.is_authenticated():
         logout(request)
-        context = RequestContext(request, 
-                                 {'uname': request.user.username,
-                                  'req': REQ_DEAUTH,
-                                  'req_params': '',
-                                  'code': RES_SUCCESS,
-                                  'payload': ["deauthenticated"]
-                                  })
+        return buildResponseMessage(request, REQ_DEAUTH, RES_SUCCESS, "Deauthenticated")
     else:
-        context = RequestContext(request, 
-                                 {'uname': '',
-                                  'req': REQ_DEAUTH,
-                                  'req_params': '',
-                                  'code': RES_FAILURE,
-                                  'payload': ["not authenticated"]
-                                  })
-    return HttpResponse(template.render(context))
+        return buildResponseMessage(request, REQ_DEAUTH, RES_FAILURE, "Not authenticated")
 
 """
 upload video content
@@ -218,25 +176,13 @@ such as
 </form>
 """ 
 def upload(request):
-    template = loader.get_template('sfmmanager/response.xml')
     if request.user.is_authenticated():
-        context_dict = {'uname': request.user.username,
-                        'req': REQ_JOB,
-                        'req_params': '',
-                        'code': RES_FAILURE,
-                        'payload': []
-                        }
         #check if the user has reached the maximum video count
         #that is allowed to store
         user_videos = Video.objects.filter(uid=request.user)
         #the user_max_files constant is defined in the model
         if len(user_videos) >= USER_MAX_FILES:
-            context_dict = {'uname': request.user.username,
-                            'req': REQ_JOB,
-                            'req_params': '',
-                            'code': RES_FAILURE,
-                            'payload': ['Maximum video upload limit reached']
-                }
+            return buildResponseMessage(request, REQ_JOB, RES_FAILURE, "Maximum video upload limit reached")
         elif request.method == "POST":
             form = UploadFileForm(request.POST, request.FILES)
             if form.is_valid():
@@ -251,40 +197,31 @@ def upload(request):
                 #check if video has already been uploaded
                 existing = Video.objects.filter(uid=request.user, 
                                                 vhash=temp_hash.hexdigest())
+                code = RES_FAILURE
+                msg = ''
                 if len(existing) > 1:
                     #error
-                    context_dict['payload'] = ['Unrecoverable Error']
+                    msg = 'Unrecoverable Error'
                 elif len(existing) == 1:
                     #already existing entry
-                    context_dict['payload'] = ['Job already exists']
+                    msg = 'Job already exists'
                 else:
                     #set response args
-                    context_dict['req_params'] = video.vname
-                    context_dict['code'] = RES_SUCCESS
-                    context_dict['payload'] = ['Job submitted']
+                    code = RES_SUCCESS
+                    msg = 'Job submitted'
                     #save new entry
                     video.save()
                     #submit task chain to celery worker
                     video.process()
+                return buildResponseMessage(request, REQ_JOB, code, msg)
             else:
                 #form not valid
-                context_dict['payload'] = ['Invalid form format']
+                return buildResponseMessage(request, REQ_JOB, RES_FAILURE, "Invalid form format")
         else:
             #non POST request
-            context_dict['payload'] = ['Invalid request']
-        #get the context given
-        context = RequestContext(request, context_dict)
+            return buildResponseMessage(request, REQ_JOB, RES_FAILURE, "Invalid request")
     else:
-        context = RequestContext(request, 
-                                 {'uname': '',
-                                  'req': REQ_JOB,
-                                  'req_params': '',
-                                  'code': RES_FAILURE,
-                                  'payload': ["unauthenticated"]
-                                  })
-    #render the response using the context previously built
-    return HttpResponse(template.render(context))
-
+        return buildResponseMessage(request, REQ_JOB, RES_FAILURE, "Unauthenticated")
 
 """
 serve requested file, se apache mod_xsendfile for production use
@@ -330,7 +267,6 @@ remove a video and video data associated on the server
 """
 def delete(request):
     #check if user is authenticated
-    template = loader.get_template('sfmmanager/response.xml')
     if request.user.is_authenticated():
         rname = request.GET.get('name', None)
         if rname:
@@ -341,39 +277,13 @@ def delete(request):
                 #delete video and data
                 resource.removeProcessingData()
                 video_objects.delete()
-                context = RequestContext(request, 
-                                   {'uname': request.user.username,
-                                    'req': REQ_DEL,
-                                    'req_params': rname,
-                                    'code': RES_SUCCESS,
-                                    'payload': ["deleted"]
-                                    })
+                return buildResponseMessage(request, REQ_DEL, RES_SUCCESS, "Deleted")
             else:
-                context = RequestContext(request, 
-                                  {'uname': request.user.username,
-                                  'req': REQ_DEL,
-                                  'req_params': '',
-                                  'code': RES_FAILURE,
-                                  'payload': ["unexisting video"]
-                                  })
+                return buildResponseMessage(request, REQ_DEL, RES_FAILURE, "Unexisting video")
         else:
-            context = RequestContext(request, 
-                                 {'uname': request.user.username,
-                                  'req': REQ_DEL,
-                                  'req_params': rname,
-                                  'code': RES_FAILURE,
-                                  'payload': ["no name given"]
-                                  })
+            return buildResponseMessage(request, REQ_DEL, RES_FAILURE, "No name given")
     else:
-        context = RequestContext(request, 
-                                 {'uname': '',
-                                  'req': REQ_DEL,
-                                  'req_params': '',
-                                  'code': RES_FAILURE,
-                                  'payload': ["unauthenticated"]
-                                  })
-    return HttpResponse(template.render(context))
-
+        return buildResponseMessage(request, REQ_DEL, RES_FAILURE, "Unauthenticated")
 
 #@####################################################################
 # Testing- STUFF
