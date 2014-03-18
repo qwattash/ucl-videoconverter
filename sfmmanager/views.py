@@ -102,7 +102,7 @@ def auth(request):
             if user.is_active:
                 #valid account
                 login(request, user)
-                return buildResponseMessage(request, REQ_AUTH, RES_SUCCESS, "Authentication succeded")    
+                return buildResponseMessage(request, REQ_AUTH, RES_SUCCESS, "authentication succeded")    
             else:
                 #account disabled
                 return buildResponseMessage(request, REQ_AUTH, RES_FAILURE, "Account banned")
@@ -135,7 +135,8 @@ def register(request):
         pwd = request.GET.get('password', None)
         email = request.GET.get('email', None)
         if (name and pwd):
-            user = User.objects.create_user(name, email, pwd)
+            User.objects.create_user(name, email, pwd)
+            user = authenticate(username=name, password=pwd)
             login(request, user)
             return buildResponseMessage(request, REQ_REG, RES_SUCCESS, "Registered")
         else:
@@ -195,8 +196,11 @@ def upload(request):
                     temp_hash.update(chunk)
                 video.vhash = temp_hash.hexdigest()
                 #check if video has already been uploaded
-                existing = Video.objects.filter(uid=request.user, 
-                                                vhash=temp_hash.hexdigest())
+                existingData = Video.objects.filter(uid=request.user, 
+                                                    vhash=temp_hash.hexdigest())
+                existingName = Video.objects.filter(uid=request.user,
+                                                    vname=video.vname)
+                existing = existingName or existingData
                 code = RES_FAILURE
                 msg = ''
                 if len(existing) > 1:
@@ -228,37 +232,63 @@ serve requested file, se apache mod_xsendfile for production use
 https://docs.djangoproject.com/en/1.2/howto/static-files/
 https://github.com/johnsensible/django-sendfile/tree/master/examples/protected_downloads
 """
-#TODO migrate to protected_downloads library to abstract permissions <<-----------
 def getfile(request):
-    template = loader.get_template('sfmmanager/response.xml')
     if request.user.is_authenticated():
         rname = request.GET.get('name', None)
-        if rname:
+        try:
             video = Video.objects.filter(vname=rname)[0]
+        except IndexError:
+            video = None
+        if rname and video:
             resource = ResourceData(video.data.url)
-            ### WARNING this is a devel solution not suitable for production
-            return serve(request, 
-                         resource.getURLOutputPath(), 
-                         settings.MEDIA_ROOT, 
-                         show_indexes=False)
+            path = resource.getFinalOutputFile()
+            if path != None and (str(video.status) == str(Video.STATUS_RECONSTRUCTED)):
+                #set http headers required for the download process
+                response = HttpResponse(content_type='application/force-download')
+                response['Content-Disposition'] = 'attachment; filename=%s.obj' % video.vname
+                #make use of the apache mod_xsendfile module
+                response['X-Sendfile'] = unicode(path).encode('utf-8')
+                return response
+            else:
+                return buildResponseMessage(request, REQ_DOWNLOAD, RES_FAILURE, "Output not ready or error occurred")
         else:
-            context = RequestContext(request, 
-                                 {'uname': request.user.username,
-                                  'req': REQ_DOWNLOAD,
-                                  'req_params': rname,
-                                  'code': RES_FAILURE,
-                                  'payload': ["resource not existing or not yet ready"]
-                                  })
+            return buildResponseMessage(request, REQ_DOWNLOAD, RES_FAILURE, "Resource not existing")
     else:
-        context = RequestContext(request, 
-                                 {'uname': '',
-                                  'req': REQ_DOWNLOAD,
-                                  'req_params': '',
-                                  'code': RES_FAILURE,
-                                  'payload': ["unauthenticated"]
-                                  })
-    return HttpResponse(template.render(context))
-    
+        return buildResponseMessage(request, REQ_DOWNLOAD, RES_FAILURE, "Unauthenticated")
+
+"""
+Retreive specified log file for given video if exists
+<get>
+<param type='string' name='type'>log type</param>
+<param type='string' name='name'>video name</param>
+</get>
+"""
+def getlog(request):
+    #check if user is authenticated
+    if request.user.is_authenticated():
+        rname = request.GET.get('name', None)
+        rtype = request.GET.get('type', None)
+        try:
+            video = Video.objects.filter(vname=rname)[0]
+        except IndexError:
+            video = None
+        if rname and video:
+            resource = ResourceData(video.data.url)
+            logname, path = resource.getLogPath(rtype)
+            if logname != None and path != None:
+                #set http headers required for the download process
+                response = HttpResponse(content_type='application/force-download')
+                response['Content-Disposition'] = 'attachment; filename=%s' % logname
+                #make use of the apache mod_xsendfile module
+                response['X-Sendfile'] = unicode(path).encode('utf-8')
+                return response
+            else:
+                return buildResponseMessage(request, REQ_DOWNLOAD, RES_FAILURE, "Unexisting log file")
+        else:
+            return buildResponseMessage(request, REQ_DOWNLOAD, RES_FAILURE, "Resource not existing or not yet ready")
+    else:
+        return buildResponseMessage(request, REQ_DOWNLOAD, RES_FAILURE, "Unauthenticated")
+
 """
 remove a video and video data associated on the server
 <get>
@@ -302,3 +332,7 @@ def rerun(request):
             v.save()
         v.process()
     return HttpResponse('<p>Rerun</p>')
+
+def debug(request):
+    tasks.debugTask.apply_async((None,))
+    return HttpResponse('<p>Debug</p>')

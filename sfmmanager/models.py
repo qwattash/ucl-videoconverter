@@ -6,10 +6,12 @@ from django.contrib.auth.models import User
 import tasks
 from celery import chain
 
+from sfmmanager.storage_utils import UserData
+
 import os
 
 #constant for the maximum number of uploadable videos by an user
-USER_MAX_FILES = 20
+USER_MAX_FILES = 200
 
 class Video(models.Model):
 
@@ -41,14 +43,15 @@ class Video(models.Model):
     data = models.FileField(upload_to=lambda instance, filename: Video.generate_file_name(instance, filename), null=True)
     #number of frames per second to extract from the video
     num_extract_fps = models.IntegerField(default=1)
+    
     """
     generate file name for given instance, self identifies the instance
     """
     def generate_file_name(self, filename):
-        base = os.path.normpath(settings.MEDIA_ROOT)
+        res = UserData(self.uid)
         root, ext = os.path.splitext(filename)
         name = self.vhash + ext
-        path = os.path.join(base, str(self.uid.id), name)
+        path = res.joinPath(name)
         return path
     
     """

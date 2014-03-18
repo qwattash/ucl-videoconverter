@@ -107,14 +107,13 @@ def processOutput(vid):
     video.status = Video.STATUS_CONVERTING_OUTPUT
     video.save()
     resource = ResourceData(video.data.url)
-    plyoutput = resource.getOutputPath()
+    plyoutput = resource.getVsfmOutput()
     if not plyoutput:
         video.status = Video.STATUS_ERROR
         video.save()
         return vid
     objoutput = resource.joinPath("result.obj")
     try:
-        
         #get log file for vsfm
         log = resource.getLogFile("meshlab")
         command = "meshlabserver -i %s -o %s -om vc vn" % (plyoutput, objoutput)
@@ -145,3 +144,8 @@ def deleteProcessingData(vid):
     video.status = Video.STATUS_PENDING
     video.save()
     return vid
+
+@shared_task
+def debugTask(vid):
+    print "DISPLAY = %s" % os.getenv('DISPLAY', None)
+    return True

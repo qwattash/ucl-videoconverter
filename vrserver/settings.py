@@ -66,6 +66,10 @@ DATABASES = {
     }
 }
 
+
+# disable schema migration for tests, this caused an error
+SOUTH_TESTS_MIGRATE = False
+
 """
 #see django-pyodbc-azure documentation
 #https://pypi.python.org/pypi/django-pyodbc-azure/1.0.7
@@ -105,13 +109,14 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/1.6/howto/static-files/
+# now using apache to serve those
 
-STATIC_URL = '/home/azureuser/static/'
-STATIC_ROOT = '/home/azureuser/static/'
-STATICFILES_DIRS = (
-    os.path.join(BASE_DIR, "static"),
-    '/home/azureuser/static/',
-)
+#STATIC_URL = '/home/azureuser/static/'
+#STATIC_ROOT = '/home/azureuser/static/'
+#STATICFILES_DIRS = (
+#    os.path.join(BASE_DIR, "static"),
+#    '/home/azureuser/static/',
+#)
 #custom settings
 
 MEDIA_ROOT = os.path.join(BASE_DIR, 'uclvr_data')
@@ -124,4 +129,3 @@ CELERY_ACCEPT_CONTENT = ['json']
 #CELERY_RESULT_BACKEND = 'database'
 #CELERY_RESULT_DBURI = 'db.sqlite3'
 BROKER_URL = 'django://'
-
