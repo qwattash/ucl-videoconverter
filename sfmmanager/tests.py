@@ -7,7 +7,7 @@ from django.core.files.base import ContentFile
 
 from sfmmanager import views
 from sfmmanager.models import Video
-from sfmmanager.storage_utils import ResourceData, UserData
+from sfmmanager.storage_utils import ResourceData, UserData, PlyHeader
 
 import shutil
 import os
@@ -543,15 +543,13 @@ class ResourceDataTestCase(AuthUserTestCase):
 
 # test Ply parser
 class PlyTestCase(TestCase):
-    
-    def setUp(self):
-        pass
 
-    def tearDown(self):
-        pass
-
-    def test_malformed_header(self):
-        pass
+    def test_missing_signature(self):
+        data = open(os.path.join(settings.MEDIA_ROOT, "testing/ply/nosign.ply"))
+        self.assertRaises(Exception, PlyHeader, data)
 
     def test_good(self):
-        pass
+        data = open(os.path.join(settings.MEDIA_ROOT, "testing/ply/result2.ply"))
+        ply = PlyHeader(data)
+        self.assertEqual(ply.elements["vertex"].number, 5729)
+        self.assertEqual(ply.format, "binary_little_endian")
