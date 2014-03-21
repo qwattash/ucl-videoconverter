@@ -29,6 +29,8 @@ REQ_STATUS = "status"
 REQ_JOB = "job"
 REQ_REG = "register"
 REQ_DOWNLOAD = "download"
+REQ_RERUN = "rerun"
+REQ_CONF = "config"
 RES_SUCCESS = "success"
 RES_FAILURE = "failure"
 
@@ -306,6 +308,8 @@ def delete(request):
                 resource = ResourceData(video.data.url)
                 #delete video and data
                 resource.removeProcessingData()
+                params = Parameter.objects.filter(vid=video)
+                params.delete()
                 video_objects.delete()
                 return buildResponseMessage(request, REQ_DEL, RES_SUCCESS, "Deleted")
             else:
@@ -315,24 +319,110 @@ def delete(request):
     else:
         return buildResponseMessage(request, REQ_DEL, RES_FAILURE, "Unauthenticated")
 
+"""
+rerun the computation for a video that has failed or with new parameters
+"""
+def rerun(request):
+    if request.user.is_authenticated():
+        name = request.GET.get('name', None);
+        if name:
+            videos = Video.objects.filter(vname=name)
+            if (len(videos) > 0):
+                video = videos[0]
+                video.process()
+                return buildResponseMessage(request, REQ_RERUN, RES_SUCCESS, "Rerunning")
+            else:
+                return buildResponseMessage(request, REQ_RERUN, RES_FAILURE, "Unexisting video")
+        else:
+            return buildResponseMessage(request, REQ_RERUN, RES_FAILURE, "No name given")
+    else:
+        return buildResponseMessage(request, REQ_RERUN, RES_FAILURE, "Unauthenticated")
+
+"""
+Handle configuration of the video recontruction parameters
+<get>
+<param name='name'>name of the video to configure</param>
+<param name='cmd'>configuration command</param>
+<param name='pname'>parameter to modify</param>
+<param name='arg'>additional command argument</param> 
+</get>
+"""
+def config(request):
+    #check if user is authenticated
+    if request.user.is_authenticated():
+        # video name
+        rname = request.GET.get('name', None)
+        # command
+        cmd = request.GET.get('cmd', None)
+        # param name
+        pname = request.GET.get('pname', None)
+        # optional argument of the command
+        arg = request.GET.get('arg', None)
+        if rname and cmd and pname:
+            video_objects = Video.objects.filter(vname=rname)
+            if (len(video_objects) > 0):
+                video = video_objects[0]
+                ## check for parameter structure validity
+                params = Parameter.objects.filter(vid=video, name=pname)
+                if len(params) != 1: 
+                    if Parameter.DEFAULTS.get(pname, None):
+                        """
+                        # there should be only one parameter with name pname for each video
+                        # the parameter name should be legit
+                        # if one of these does not hold there is an error in the database
+                        # recover error, delete all but one parameters with name pname
+                        """
+                        params.delete()
+                        p = Parameter(vid=video, name=pname)
+                        p.reset()
+                    else:
+                        # the parameter given does not exist
+                        return buildResponseMessage(request, REQ_CONF, RES_FAILURE, "Invalid parameter")
+                # get parameter with name pname for this video
+                param = params[0]
+                ## now check the commands and perform action for each command
+                if cmd == 'set':
+                    if param.validate(arg):
+                        param.value = arg
+                        param.save()
+                    else:
+                        # the parameter is invalid
+                        return buildResponseMessage(request, REQ_CONF, RES_FAILURE, "Illegal parameter value")
+                elif cmd == 'reset':
+                    param.reset()
+                elif cmd == 'get':
+                    # the get command is implicitly defined since the response to any command is the
+                    # response to a get, this is used to filter valid commands only
+                    pass
+                else:
+                    # command do not exist
+                    return buildResponseMessage(request, REQ_CONF, RES_FAILURE, "Invalid command")
+                # notify the success of the operation
+                return buildResponseMessage(request, REQ_CONF, RES_SUCCESS, 
+                                            "Config {0}: {1} = {2}".format(cmd, pname, param.value))
+            else:
+                return buildResponseMessage(request, REQ_CONF, RES_FAILURE, "Unexisting video")
+        else:
+            return buildResponseMessage(request, REQ_CONF, RES_FAILURE, "Missing name of video or command")
+    else:
+        return buildResponseMessage(request, REQ_CONF, RES_FAILURE, "Unauthenticated")
+
 #@####################################################################
 # Testing- STUFF
 def test(request):
     form = UploadFileForm()
     return render_to_response('sfmmanager/test.html', {'form': form})
 
-def rerun(request):
-    name = request.GET.get('name', None);
-    vd = Video.objects.filter(vname=name)
-    for v in vd:
-        print "rerunning %s" % name
-        nframes = request.GET.get('fps', None)
-        if nframes != None:
-            v.num_extract_fps = int(nframes)
-            v.save()
-        v.process()
-    return HttpResponse('<p>Rerun</p>')
-
 def debug(request):
-    tasks.debugTask.apply_async((None,))
-    return HttpResponse('<p>Debug</p>')
+    vds = Video.objects.all()
+    r = ""
+    for v in vds:
+        #pp = ParamNumFPS(vid=v)
+        #pp.save()
+        params = Parameter.objects.filter(vid=v)
+        #params.delete()
+        r += "<ul><h3>%s</h3>" % (v.vname,)
+        for p in params:
+            r += "<li>%s: %s</li>" % (p.name, p.value)
+        r += "</ul>"
+    return HttpResponse('<p>Debug</p>' + r)

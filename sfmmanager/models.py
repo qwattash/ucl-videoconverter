@@ -2,6 +2,8 @@ from django.db import models
 from django.conf import settings
 
 from django.contrib.auth.models import User
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
 import tasks
 from celery import chain
@@ -43,7 +45,7 @@ class Video(models.Model):
     data = models.FileField(upload_to=lambda instance, filename: Video.generate_file_name(instance, filename), null=True)
     #number of frames per second to extract from the video
     num_extract_fps = models.IntegerField(default=1)
-    
+
     """
     generate file name for given instance, self identifies the instance
     """
@@ -67,3 +69,58 @@ class Video(models.Model):
                     tasks.extractFrames.s(), 
                     tasks.processFrames.s(), 
                     tasks.processOutput.s())()
+
+"""
+handle Video creation signal to create the parameters for it
+http://www.martin-geber.com/thought/2007/10/29/django-signals-vs-custom-save-method/
+generate default parameters for the reconstruction of the video and attach them to this
+video
+"""
+@receiver(post_save, sender=Video)
+def onCreate(sender, instance, created, **kwargs):
+    if created:
+        # the video has been created for the first time
+        # number of frames extracted per second
+        paramFPS = Parameter(vid=instance, name=Parameter.PARAM_FPS)
+        paramFPS.reset()
+
+"""
+model for configuration parameters
+each parameter is of the form key->value and has a video associated
+Currently it is not possible to
+"""
+class Parameter(models.Model):
+    
+    """
+    parameter names
+    """
+    PARAM_FPS = 'frames'
+    
+    """
+    map param names to their default value
+    """
+    DEFAULTS = {
+        PARAM_FPS: '1'
+        }
+
+    name = models.CharField(max_length=256, null=False, default=None)
+    value = models.CharField(max_length=256, null=False, default=None)
+    vid = models.ForeignKey(Video)
+
+    def reset(self):
+        self.value = Parameter.DEFAULTS.get(self.name, None)
+        self.save()
+
+    def validate(self, param):
+        if self.name == Parameter.PARAM_FPS:
+            try:
+                toInt = int(param)
+                return True
+            except ValueError:
+                # account for non int values
+                return False
+            except TypeError:
+                # account for NoneType param value
+                return False
+        else:
+            return False

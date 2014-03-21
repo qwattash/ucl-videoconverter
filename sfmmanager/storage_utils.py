@@ -39,7 +39,6 @@ Data storage directory hierarchy
   </directory>
 </directory>
 """
-
 class ResourceData(object):
 
     """

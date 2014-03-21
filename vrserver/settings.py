@@ -122,7 +122,7 @@ USE_TZ = True
 MEDIA_ROOT = os.path.join(BASE_DIR, 'uclvr_data')
 
 #celery configuration
-#CELERY_IMPORTS = ['vrserver.sfmmanager.tasks']
+#CELERY_IMPORTS = ('sfmmanager.tasks',)
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_ACCEPT_CONTENT = ['json']
 #CELERY_RESULT_SERIALIZER = 'json'

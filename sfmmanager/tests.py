@@ -4,10 +4,16 @@ from django.contrib.auth.models import User
 from django.core.urlresolvers import reverse
 from django.conf import settings
 from django.core.files.base import ContentFile
+from django.core.files import File
+from django.test.utils import override_settings
 
 from sfmmanager import views
-from sfmmanager.models import Video
+from sfmmanager.models import *
 from sfmmanager.storage_utils import ResourceData, UserData, PlyHeader
+from sfmmanager.tasks import *
+
+from sfmmanager.testing_utils import *
+import mock
 
 import shutil
 import os
@@ -266,6 +272,7 @@ class FileUploadTestCase(AuthUserTestCase):
             shutil.rmtree(udata.getStorageDir())
         super(FileUploadTestCase, self).tearDown()
 
+    @mock.patch("sfmmanager.models.Video.process", mock.Mock())
     def test_unauth(self):
         self.deauth()
         target = open(os.path.join(settings.MEDIA_ROOT, "testing/debug_file"))
@@ -274,7 +281,9 @@ class FileUploadTestCase(AuthUserTestCase):
         self.assertEqual(response.context['uname'], '')
         self.assertEqual(response.context['req'], views.REQ_JOB)
         self.assertEqual(response.context['payload'], ["Unauthenticated"])
+        self.assertEqual(Video.process.call_count, 0)
 
+    @mock.patch("sfmmanager.models.Video.process", mock.Mock())
     def test_upload_new(self):
         self.auth()
         target = open(os.path.join(settings.MEDIA_ROOT, "testing/debug_file"))
@@ -283,7 +292,9 @@ class FileUploadTestCase(AuthUserTestCase):
         self.assertEqual(response.context['uname'], 'debug_user')
         self.assertEqual(response.context['req'], views.REQ_JOB)
         self.assertEqual(response.context['payload'], ["Job submitted"])
+        self.assertEqual(Video.process.call_count, 1)
 
+    @mock.patch("sfmmanager.models.Video.process", mock.Mock())
     def test_upload_existing(self):
         self.auth()
         target = open(os.path.join(settings.MEDIA_ROOT, "testing/debug_file"))
@@ -292,13 +303,16 @@ class FileUploadTestCase(AuthUserTestCase):
         self.assertEqual(response.context['uname'], 'debug_user')
         self.assertEqual(response.context['req'], views.REQ_JOB)
         self.assertEqual(response.context['payload'], ["Job submitted"])
+        Video.process.reset_mock()
         target = open(os.path.join(settings.MEDIA_ROOT, "testing/debug_file"))
         response = self.client.post("/uclvr/upload", {'target': target})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['uname'], 'debug_user')
         self.assertEqual(response.context['req'], views.REQ_JOB)
         self.assertEqual(response.context['payload'], ["Job already exists"])
+        self.assertEqual(Video.process.call_count, 0)
 
+    @mock.patch("sfmmanager.models.Video.process", mock.Mock())
     def test_invalid_form(self):
         self.auth()
         target = open(os.path.join(settings.MEDIA_ROOT, "testing/debug_file"))
@@ -307,7 +321,9 @@ class FileUploadTestCase(AuthUserTestCase):
         self.assertEqual(response.context['uname'], 'debug_user')
         self.assertEqual(response.context['req'], views.REQ_JOB)
         self.assertEqual(response.context['payload'], ["Invalid form format"])
+        self.assertEqual(Video.process.call_count, 0)
 
+    @mock.patch("sfmmanager.models.Video.process", mock.Mock())
     def test_invalid_request(self):
         self.auth()
         target = open(os.path.join(settings.MEDIA_ROOT, "testing/debug_file"))
@@ -316,6 +332,7 @@ class FileUploadTestCase(AuthUserTestCase):
         self.assertEqual(response.context['uname'], 'debug_user')
         self.assertEqual(response.context['req'], views.REQ_JOB)
         self.assertEqual(response.context['payload'], ["Invalid request"])
+        self.assertEqual(Video.process.call_count, 0)
         
 # test file download
 class ResultDownloadTestCase(AuthUserTestCase):
@@ -435,6 +452,189 @@ class DumpLogTestCase(AuthUserTestCase):
         self.assertEqual(response.get('Content-Disposition'), "attachment; filename=ffmpeg.log")
         self.assertEqual(response.get('X-Sendfile'), os.path.join(self.data_path, "log/ffmpeg.log"))
 
+class FakeVideo(Video):
+    class Meta:
+        proxy=True
+
+# test rerun command
+class RerunTestCase(AuthUserTestCase):
+    
+    def setUp(self):
+        super(RerunTestCase, self).setUp()
+        self.video = Video()
+        self.video.data = None
+        self.video.uid = self.user
+        self.video.vname = "dummy"
+        self.video.vhash = ""
+        self.video.status = Video.STATUS_RECONSTRUCTED
+        self.video.save()
+    
+    def tearDown(self):
+        Video.objects.filter(uid=self.user).delete()
+        super(RerunTestCase, self).tearDown()
+
+    def test_rerun_unauth(self):
+        self.deauth()
+        response = self.client.get("/uclvr/rerun", {'name': 'dummy'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['uname'], '')
+        self.assertEqual(response.context['req'], views.REQ_RERUN)
+        self.assertEqual(response.context['payload'], ["Unauthenticated"])
+
+    def test_unexisting(self):
+        self.auth()
+        response = self.client.get("/uclvr/rerun", {'name': 'unexisting'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['uname'], 'debug_user')
+        self.assertEqual(response.context['req'], views.REQ_RERUN)
+        self.assertEqual(response.context['payload'], ["Unexisting video"])
+
+    def test_no_name(self):
+        self.auth()
+        response = self.client.get("/uclvr/rerun")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['uname'], 'debug_user')
+        self.assertEqual(response.context['req'], views.REQ_RERUN)
+        self.assertEqual(response.context['payload'], ["No name given"])
+    
+    """
+    see http://www.mattjmorrison.com/2011/09/mocking-django.html
+    """
+    @mock.patch("sfmmanager.models.Video.process", mock.Mock())
+    def test_success(self):
+        self.auth()
+        response = self.client.get("/uclvr/rerun", {'name': 'dummy'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['uname'], 'debug_user')
+        self.assertEqual(response.context['req'], views.REQ_RERUN)
+        self.assertEqual(response.context['payload'], ["Rerunning"])
+        self.assertEqual(Video.process.call_count, 1)
+
+class ConfigTestCase(AuthUserTestCase):
+    
+    def setUp(self):
+        super(ConfigTestCase, self).setUp()
+        self.video = Video()
+        self.video.data = None
+        self.video.uid = self.user
+        self.video.vname = "dummy"
+        self.video.vhash = ""
+        self.video.status = Video.STATUS_RECONSTRUCTED
+        self.video.save()
+    
+    def tearDown(self):
+        Video.objects.filter(uid=self.user).delete()
+        super(ConfigTestCase, self).tearDown()
+
+    def test_param_created(self):
+        self.video = Video()
+        self.video.data = None
+        self.video.uid = self.user
+        self.video.vname = "foo"
+        self.video.vhash = ""
+        self.video.status = Video.STATUS_RECONSTRUCTED
+        self.video.save()
+        params = Parameter.objects.filter(vid=self.video)
+        self.assertTrue(len(params) > 0)
+        self.assertEqual(params[0].name, Parameter.PARAM_FPS)
+        self.assertEqual(params[0].value, Parameter.DEFAULTS[Parameter.PARAM_FPS])
+
+    def test_config_unauth(self):
+        self.deauth()
+        response = self.client.get("/uclvr/config", {'name': 'dummy', 'cmd': 'reset', 'pname': 'frames'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['uname'], '')
+        self.assertEqual(response.context['req'], views.REQ_CONF)
+        self.assertEqual(response.context['payload'], ["Unauthenticated"])
+
+    def test_config_unexisting(self):
+        self.auth()
+        response = self.client.get("/uclvr/config", {'name': 'unexisting', 'cmd': 'reset', 'pname': 'frames'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['uname'], 'debug_user')
+        self.assertEqual(response.context['req'], views.REQ_CONF)
+        self.assertEqual(response.context['payload'], ["Unexisting video"])
+
+    def test_no_name(self):
+        self.auth()
+        response = self.client.get("/uclvr/config", {'cmd': 'reset', 'pname': 'frames'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['uname'], 'debug_user')
+        self.assertEqual(response.context['req'], views.REQ_CONF)
+        self.assertEqual(response.context['payload'], ["Missing name of video or command"])
+    
+    """
+    see http://www.mattjmorrison.com/2011/09/mocking-django.html
+    """
+    @mock.patch("sfmmanager.models.Parameter.reset", mock.Mock())
+    def test_reset(self):
+        self.auth()
+        Parameter.reset.return_value = '1'
+        response = self.client.get("/uclvr/config", {'name': 'dummy', 'pname': 'frames', 'cmd': 'reset'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['uname'], 'debug_user')
+        self.assertEqual(response.context['req'], views.REQ_CONF)
+        self.assertEqual(response.context['payload'], ["Config reset: frames = 1"])
+        self.assertEqual(Parameter.reset.call_count, 1)
+        self.assertEqual(Parameter.objects.filter(vid=self.video, name='frames')[0].value, '1')
+
+    def test_set_noarg(self):
+        self.auth()
+        response = self.client.get("/uclvr/config", {'name': 'dummy', 'pname': 'frames', 'cmd': 'set'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['uname'], 'debug_user')
+        self.assertEqual(response.context['req'], views.REQ_CONF)
+        self.assertEqual(response.context['payload'], ["Illegal parameter value"])
+
+    def test_set_wrong_arg(self):
+        self.auth()
+        response = self.client.get("/uclvr/config", {'name': 'dummy', 'pname': 'frames', 'cmd': 'set', 'arg': 'thisShouldBeInt'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['uname'], 'debug_user')
+        self.assertEqual(response.context['req'], views.REQ_CONF)
+        self.assertEqual(response.context['payload'], ["Illegal parameter value"])
+
+    def test_set_wrong_param(self):
+        self.auth()
+        response = self.client.get("/uclvr/config", {'name': 'dummy', 'pname': 'unexistingparam', 'cmd': 'set', 'arg': '1'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['uname'], 'debug_user')
+        self.assertEqual(response.context['req'], views.REQ_CONF)
+        self.assertEqual(response.context['payload'], ["Invalid parameter"])
+
+    def test_set(self):
+        self.auth()
+        response = self.client.get("/uclvr/config", {'name': 'dummy', 'pname': 'frames', 'cmd': 'set', 'arg': '10'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['uname'], 'debug_user')
+        self.assertEqual(response.context['req'], views.REQ_CONF)
+        self.assertEqual(response.context['payload'], ["Config set: frames = 10"])
+        self.assertEqual(Parameter.objects.filter(vid=self.video, name='frames')[0].value, '10')
+
+    def test_get(self):
+        self.auth()
+        param = Parameter.objects.filter(vid=self.video, name='frames')[0]
+        param.value = '99'
+        param.save()
+        response = self.client.get("/uclvr/config", {'name': 'dummy', 'pname': 'frames', 'cmd': 'get'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['uname'], 'debug_user')
+        self.assertEqual(response.context['req'], views.REQ_CONF)
+        self.assertEqual(response.context['payload'], ["Config get: frames = 99"])
+    
+    def test_invalid_command(self):
+        self.auth()
+        response = self.client.get("/uclvr/config", {'name': 'dummy', 'pname': 'frames', 'cmd': 'unexisting_command', 'arg': '10'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['uname'], 'debug_user')
+        self.assertEqual(response.context['req'], views.REQ_CONF)
+        self.assertEqual(response.context['payload'], ["Invalid command"])
+        
+# test Param models
+# ParamNumFPS
+class ParamFpsTestCase(TestCase):
+    pass
+
 # test UserData
 class UserDataTestCase(AuthUserTestCase):
 
@@ -553,3 +753,65 @@ class PlyTestCase(TestCase):
         ply = PlyHeader(data)
         self.assertEqual(ply.elements["vertex"].number, 5729)
         self.assertEqual(ply.format, "binary_little_endian")
+
+########## celery tasks are tested
+
+#override celery production settings
+"""
+@override_settings(CELERY_EAGER_PROPAGATES_EXCEPTIONS=True,
+                   CELERY_ALWAYS_EAGER=True,
+                   BROKER_BACKEND='memory')
+
+class CeleryTestCase(TestCase):
+    
+    def setUp(self):
+        #create dummy user
+        self.user = User.objects.create_user("debug_user", "", "debug_user")
+        self.user.save()
+        self.udata = UserData(self.user)
+    
+    def tearDown(self):
+        self.user.delete()
+
+@override_settings(CELERY_EAGER_PROPAGATES_EXCEPTIONS=True,
+                   CELERY_ALWAYS_EAGER=True,
+                   BROKER_BACKEND='memory')
+class ExtractFramesTestCase(CeleryTestCase):
+
+    SAMPLE_FILE = "testing/samples/ffmpeg/c4ea9969cd299e73eccc37e918b59fa4.mp4"
+    FILE_HASH = "c4ea9969cd299e73eccc37e918b59fa4"
+    def setUp(self):
+        super(ExtractFramesTestCase, self).setUp()
+        self.path = os.path.join(self.udata.getStorageDir(), ExtractFramesTestCase.FILE_HASH)
+        self.data_path = self.path + "_data"
+        os.mkdir(self.udata.getStorageDir())
+        os.mkdir(self.data_path)
+        #shutil.copytree(os.path.join(settings.MEDIA_ROOT, "testing/template_dir"), self.data_path)
+        self.tempfile = File(open(os.path.join(settings.MEDIA_ROOT, ExtractFramesTestCase.SAMPLE_FILE)))
+        self.tempfile.name = "dummy.mp4"
+        self.video = Video()
+        self.video.data = self.tempfile
+        self.video.uid = self.user
+        self.video.vname = "dummy.mp4"
+        self.video.vhash = ExtractFramesTestCase.FILE_HASH
+        self.video.status = Video.STATUS_PENDING
+        self.video.save()
+
+    def tearDown(self):
+        Video.objects.filter(uid=self.user).delete()
+        shutil.rmtree(self.udata.getStorageDir())
+        super(ExtractFramesTestCase, self).tearDown()
+
+    def test_extract_frames(self):
+        from celery import Celery
+        os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'vrserver.settings')
+        
+        app = Celery('vrserver')
+        app.config_from_object('django.conf:settings')
+        app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
+
+        result = extractFrames(self.video.id)
+        print result.status
+        print os.listdir(self.data_path)
+        
+"""

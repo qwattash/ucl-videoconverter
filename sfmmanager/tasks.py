@@ -27,6 +27,7 @@ i) number of frames in output changing -r arg
 def extractFrames(vid):
     #get video instance
     video = Video.objects.get(pk=vid)
+    params = Parameter.objects.get(vid=video)
     #update status to working
     video.status = Video.STATUS_EXTRACT_FRAMES
     video.save()
@@ -36,7 +37,10 @@ def extractFrames(vid):
         #create logfile
         log = resource.getLogFile("ffmpeg")
         output_path = resource.joinPath("frame%d.jpg")
-        command = "ffmpeg -i %s -r %d %s" % (video.data.url, video.num_extract_fps, output_path)
+        # if a parameter is not existing, filter().value will throw an exception since None.value
+        # is not permitted; this will in turn cause the error state to be captured
+        num_extract_fps = params.filter(name=Param.PARAM_NUM_FRAMES).value
+        command = "ffmpeg -i %s -r %d %s" % (video.data.url, num_extract_fps, output_path)
         args = shlex.split(command)
         print args
         extractor = subprocess.Popen(args,
