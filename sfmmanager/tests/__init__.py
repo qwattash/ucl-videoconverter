@@ -13,3 +13,4 @@ from .view_register import *
 from .view_rerun import *
 from .view_upload import *
 from .view_status import *
+from .config import *

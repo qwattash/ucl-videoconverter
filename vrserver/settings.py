@@ -111,7 +111,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/1.6/howto/static-files/
 # now using apache to serve those
 
-#STATIC_URL = '/home/azureuser/static/'
+STATIC_URL = '/home/azureuser/static/'
 #STATIC_ROOT = '/home/azureuser/static/'
 #STATICFILES_DIRS = (
 #    os.path.join(BASE_DIR, "static"),
@@ -122,7 +122,7 @@ USE_TZ = True
 MEDIA_ROOT = os.path.join(BASE_DIR, 'uclvr_data')
 
 #celery configuration
-#CELERY_IMPORTS = ('sfmmanager.tasks',)
+CELERY_IMPORTS = ('sfmmanager.tasks',)
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_ACCEPT_CONTENT = ['json']
 #CELERY_RESULT_SERIALIZER = 'json'

@@ -1,18 +1,27 @@
 from django.core.urlresolvers import reverse
+from django.core.files.base import ContentFile
 
+from sfmmanager.storage_utils import ResourceData, UserData
 from sfmmanager import views
 from sfmmanager.models import *
 
 from .base import *
+
+import shutil
+import os
 
 # test delete view
 class DeleteTestCase(AuthUserTestCase):
 
     def setUp(self):
         super(DeleteTestCase, self).setUp()
-        # error video
+        self.udata = UserData(self.user)
+        os.mkdir(self.udata.getStorageDir())
+        # create video
         video = Video()
-        video.data = "DUMMYDATA"
+        tempfile = ContentFile("DUMMY_DATA")
+        tempfile.name = "dummy"
+        video.data = tempfile
         video.uid = self.user
         video.vname = "dummy"
         video.vhash = ""
@@ -20,9 +29,10 @@ class DeleteTestCase(AuthUserTestCase):
         video.save()
 
     def tearDown(self):
-        super(DeleteTestCase, self).tearDown()
+        shutil.rmtree(self.udata.getStorageDir())
         Video.objects.filter(uid=self.user).delete()
-
+        super(DeleteTestCase, self).tearDown()
+        
     def test_unauthenticated(self):
         self.deauth()
         response = self.client.get("/uclvr/delete")

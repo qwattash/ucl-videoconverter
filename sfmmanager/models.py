@@ -5,9 +5,6 @@ from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-import tasks
-from celery import chain
-
 from sfmmanager.storage_utils import UserData
 
 import os
@@ -56,20 +53,6 @@ class Video(models.Model):
         path = res.joinPath(name)
         return path
     
-    """
-    Process video
-    processing is done usinga celery task chain
-    priority and numberof runing tasks can be configured
-    in the celery module
-    """
-    def process(self):
-        self.status = Video.STATUS_PENDING
-        #res = tasks.extractFrames.apply_async((self.id,))
-        res = chain(tasks.deleteProcessingData.s(self.id),
-                    tasks.extractFrames.s(), 
-                    tasks.processFrames.s(), 
-                    tasks.processOutput.s())()
-
 """
 handle Video creation signal to create the parameters for it
 http://www.martin-geber.com/thought/2007/10/29/django-signals-vs-custom-save-method/

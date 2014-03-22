@@ -3,6 +3,7 @@ from django.core.urlresolvers import reverse
 
 from sfmmanager import views
 from sfmmanager.models import *
+from sfmmanager.task_manager import *
 from .base import *
 import mock
 
@@ -50,7 +51,7 @@ class RerunTestCase(AuthUserTestCase):
     """
     see http://www.mattjmorrison.com/2011/09/mocking-django.html
     """
-    @mock.patch("sfmmanager.models.Video.process", mock.Mock())
+    @mock.patch("sfmmanager.task_manager.TaskManager.run", mock.Mock())
     def test_success(self):
         self.auth()
         response = self.client.get("/uclvr/rerun", {'name': 'dummy'})
@@ -58,4 +59,4 @@ class RerunTestCase(AuthUserTestCase):
         self.assertEqual(response.context['uname'], 'debug_user')
         self.assertEqual(response.context['req'], views.REQ_RERUN)
         self.assertEqual(response.context['payload'], ["Rerunning"])
-        self.assertEqual(Video.process.call_count, 1)
+        self.assertEqual(TaskManager.run.call_count, 1)

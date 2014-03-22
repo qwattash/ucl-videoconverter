@@ -1,6 +1,6 @@
 from django.conf import settings
 
-from sfmmanager.models import Parameter
+from sfmmanager.models import *
 from sfmmanager.storage_utils import ResourceData
 
 import shutil
@@ -34,14 +34,14 @@ class Config(dict):
                 break
             # parse line
             # if is comment skip it
-            if line[0] != "#":
+            if line[0] != "#" and line != "\n":
                 # get key value pair in the skeleton
-                match = re.search('([A-Za-z_]+)[ \t]+([0-9A-Za-z]*)', line)
+                match = re.search('([A-Za-z0-9_-]+)[ \t]+([\.0-9A-Za-z "\'-]*)', line.rstrip())
                 self[match.group(1)] = match.group(2)
         conf.close()
     
     def save(self):
-        conf = open(self.src, "w+")
+        conf = open(self.dst, "w+")
         conf.seek(0)
         for key,value in self.items():
             conf.write("{0} {1}\n".format(key, value))
@@ -53,6 +53,10 @@ class ConfigFactory(object):
 
     # path to the template conf files relative to MEDIA_ROOT
     SKELETON_PATH = "conf/"
+    # vsfm conf path
+    # this may become an entry in django settings
+    VSFM_CONF_PATH = "/home/azureuser/workspace/vsfm/vsfm/bin/nv.ini"
+
     def __init__(self, video):
         res = ResourceData(video.vname)
         self.video = video
@@ -77,8 +81,12 @@ class ConfigFactory(object):
         for p in params:
             if conf.has_key(p.name):
                 conf[p.name] = p.value
-            else:
-                # error, the skeleton should have all the permitted parameters!
-                raise Exception("configuration error")
         # save conf file
         conf.save()
+        return conf_file
+
+    def deployVsfmConf(self, path):
+        # remove current ini
+        if os.path.exists(ConfigFactory.VSFM_CONF_PATH):
+            os.remove(ConfigFactory.VSFM_CONF_PATH)
+        shutil.copy(path, ConfigFactory.VSFM_CONF_PATH)

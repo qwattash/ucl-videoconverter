@@ -11,7 +11,7 @@ from django.template import RequestContext, loader
 from django.conf import settings
 
 ##devel
-from django.views.static import serve
+#from django.views.static import serve
 ##
 
 import hashlib
@@ -20,6 +20,7 @@ import random
 from sfmmanager.models import *
 from sfmmanager.forms import *
 from sfmmanager.storage_utils import *
+from sfmmanager.task_manager import *
 
 #reserved values for output code fields
 REQ_AUTH = "auth"
@@ -218,7 +219,8 @@ def upload(request):
                     #save new entry
                     video.save()
                     #submit task chain to celery worker
-                    video.process()
+                    manager = TaskManager(video.id)
+                    manager.run()
                 return buildResponseMessage(request, REQ_JOB, code, msg)
             else:
                 #form not valid
@@ -329,7 +331,8 @@ def rerun(request):
             videos = Video.objects.filter(vname=name)
             if (len(videos) > 0):
                 video = videos[0]
-                video.process()
+                manager = TaskManager(video.id)
+                manager.run()
                 return buildResponseMessage(request, REQ_RERUN, RES_SUCCESS, "Rerunning")
             else:
                 return buildResponseMessage(request, REQ_RERUN, RES_FAILURE, "Unexisting video")

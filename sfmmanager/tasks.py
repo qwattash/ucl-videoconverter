@@ -12,6 +12,7 @@ from celery import shared_task, task
 
 from sfmmanager.models import *
 from sfmmanager.storage_utils import *
+from sfmmanager.config import *
 
 import os
 import subprocess
@@ -27,7 +28,7 @@ i) number of frames in output changing -r arg
 def extractFrames(vid):
     #get video instance
     video = Video.objects.get(pk=vid)
-    params = Parameter.objects.get(vid=video)
+    params = Parameter.objects.filter(vid=video)
     #update status to working
     video.status = Video.STATUS_EXTRACT_FRAMES
     video.save()
@@ -39,8 +40,9 @@ def extractFrames(vid):
         output_path = resource.joinPath("frame%d.jpg")
         # if a parameter is not existing, filter().value will throw an exception since None.value
         # is not permitted; this will in turn cause the error state to be captured
-        num_extract_fps = params.filter(name=Param.PARAM_NUM_FRAMES).value
-        command = "ffmpeg -i %s -r %d %s" % (video.data.url, num_extract_fps, output_path)
+        param_fps = params.filter(name=Parameter.PARAM_FPS)[0]
+        num_extract_fps = param_fps.value
+        command = "ffmpeg -i {in_path} -r {fps} {out_path}".format(in_path=video.data.url, fps=num_extract_fps, out_path=output_path)
         args = shlex.split(command)
         print args
         extractor = subprocess.Popen(args,
@@ -52,6 +54,7 @@ def extractFrames(vid):
         if extractor.returncode != 0:
             raise Exception('ffmpeg terminated incorrectly') 
     except Exception as e:
+        print e
         video.status = Video.STATUS_ERROR
         video.save()
     return vid
@@ -81,6 +84,17 @@ def processFrames(vid):
         input_path = resource.joinPath("")
         command = "vsfm sfm+pmvs %s %s" % (input_path, output_path)
         args = shlex.split(command)
+        # prepare and deploy configuration file
+        """
+        WARNING in this senario there can be two vsfm processes
+        that try to start, the one that copies the conf file last
+        may erroneously reconfigure the first one.
+        this should be avoided by changing the working dir or whatever
+        """
+        factory = ConfigFactory(video)
+        conf_path = factory.buildVsfmConf()
+        factory.deployVsfmConf(conf_path)
+        # start vsfm process
         print args
         vsfm = subprocess.Popen(args,
                                 stdin=None,
