@@ -2,7 +2,9 @@
 
 from .ply import *
 from .resourcedata import *
-#from .tasks import *
+from .task_ffmpeg import *
+from .task_vsfm import *
+from .task_meshlab import *
 from .userdata import *
 from .view_auth import *
 from .view_config import *

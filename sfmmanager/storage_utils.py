@@ -85,6 +85,12 @@ class ResourceData(object):
         hlog = os.fdopen(log_fd, "rw+")
         return hlog
 
+    def getStorageDir(self):
+        """
+        return storage directory for the video data
+        """
+        return self._root_data
+
     def joinPath(self, path):
         """
         create absolute path form one relative to the data root

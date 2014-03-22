@@ -81,7 +81,7 @@ def processFrames(vid):
         #get log file for vsfm
         log = resource.getLogFile("vsfm")
         output_path = resource.joinPath("vsfm.nvm")
-        input_path = resource.joinPath("")
+        input_path = resource.getStorageDir()
         command = "vsfm sfm+pmvs %s %s" % (input_path, output_path)
         args = shlex.split(command)
         # prepare and deploy configuration file
@@ -104,9 +104,10 @@ def processFrames(vid):
         log.close()
         if vsfm.returncode != 0:
             raise Exception('vsfm terminated incorrectly')
-    except:
+    except Exception as e:
         video.status = Video.STATUS_ERROR
         video.save()
+        print e
     return vid
 
 """
@@ -147,9 +148,10 @@ def processOutput(vid):
             raise Exception('meshlabserver terminated incorrectly')
         video.status = Video.STATUS_RECONSTRUCTED
         video.save()
-    except:
+    except Exception as e:
         video.status = Video.STATUS_ERROR
         video.save()
+        print e
     return vid
 
 @shared_task

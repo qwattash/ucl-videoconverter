@@ -58,7 +58,7 @@ class ConfigFactory(object):
     VSFM_CONF_PATH = "/home/azureuser/workspace/vsfm/vsfm/bin/nv.ini"
 
     def __init__(self, video):
-        res = ResourceData(video.vname)
+        res = ResourceData(video.data.url)
         self.video = video
         self.temp_path = res.joinPath("conf")
         if not os.path.exists(self.temp_path):
