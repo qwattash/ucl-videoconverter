@@ -1,5 +1,5 @@
 user:{{uname}}
 request:{{req}}
-{% if payload %}{% for item in payload %}{{item}},{% endfor %}{% endif %}
+{% if payload %}{% for item in payload %}{{item}}{% if not forloop.last %},{% endif %}{% endfor %}{% endif %}
 {% if list_payload %}{% for item_token,item in list_payload %}{{item}} {{item_token}}
 {% endfor %}{% endif %}
