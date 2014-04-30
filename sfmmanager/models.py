@@ -2,10 +2,10 @@ from django.db import models
 from django.conf import settings
 
 from django.contrib.auth.models import User
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 
-from sfmmanager.storage_utils import UserData
+from sfmmanager.storage_utils import *
 
 import os
 
@@ -30,6 +30,7 @@ class Video(models.Model):
         (STATUS_ERROR, "Error"),
         (STATUS_FORBIDDEN, "Forbidden"),
         (STATUS_UNKNOWN, "Unknown"),
+        (STATUS_CONVERTING_OUTPUT, "Converting"),
     )
 
     uid = models.ForeignKey(User)
@@ -66,6 +67,15 @@ def onCreate(sender, instance, created, **kwargs):
         # number of frames extracted per second
         paramFPS = Parameter(vid=instance, name=Parameter.PARAM_FPS)
         paramFPS.reset()
+
+@receiver(post_delete, sender=Video)
+def deleteHandler(sender, **kwargs):
+    video = kwargs['instance']
+    path = video.data.url
+    resource = ResourceData(path)
+    resource.clear()
+    if os.path.exists(path):
+        os.remove(path)
 
 """
 model for configuration parameters

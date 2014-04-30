@@ -218,6 +218,7 @@ def upload(request):
                     msg = 'Job submitted'
                     #save new entry
                     video.save()
+                    resource = ResourceData(video.data.url)
                     #submit task chain to celery worker
                     manager = TaskManager(video.id)
                     manager.run()
@@ -323,6 +324,9 @@ def delete(request):
 
 """
 rerun the computation for a video that has failed or with new parameters
+<get>
+<param name='name'>name of the video to rerun</param>
+</get>
 """
 def rerun(request):
     if request.user.is_authenticated():

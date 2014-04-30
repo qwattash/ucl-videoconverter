@@ -126,7 +126,7 @@ def processOutput(vid):
     video.status = Video.STATUS_CONVERTING_OUTPUT
     video.save()
     resource = ResourceData(video.data.url)
-    plyoutput = resource.getVsfmOutput()
+    plyoutput = resource.getUniqueVsfmOutput()
     if not plyoutput:
         video.status = Video.STATUS_ERROR
         video.save()

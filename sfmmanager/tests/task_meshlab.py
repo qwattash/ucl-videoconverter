@@ -43,11 +43,11 @@ class MeshlabTestCase(CeleryTestCase):
         super(MeshlabTestCase, self).tearDown()
 
     @mock.patch("sfmmanager.storage_utils.ResourceData.getLogFile", mock.Mock())
-    @mock.patch("sfmmanager.storage_utils.ResourceData.getVsfmOutput", mock.Mock())
+    @mock.patch("sfmmanager.storage_utils.ResourceData.getUniqueVsfmOutput", mock.Mock())
     @mock.patch("subprocess.Popen")
     def test_meshlab_call(self, mock_task):
         mock_log = sfmmanager.storage_utils.ResourceData.getLogFile
-        mock_ply = sfmmanager.storage_utils.ResourceData.getVsfmOutput
+        mock_ply = sfmmanager.storage_utils.ResourceData.getUniqueVsfmOutput
         mock_log.return_value = StringIO.StringIO()
         mock_task.return_value.returncode = 0
         mock_ply.return_value = os.path.join(self.data_path, "vsfm.0.ply")
